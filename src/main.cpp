@@ -250,10 +250,10 @@ const char HTML_HEADER[] PROGMEM = R"rawliteral(
         </div>
         
         <div class="tabs">
-            <button class="tab active" onclick="showTab('info')">📊 Thông Tin</button>
-            <button class="tab" onclick="showTab('read')">📖 Đọc Dữ Liệu</button>
-            <button class="tab" onclick="showTab('write')">✍️ Ghi Dữ Liệu</button>
-            <button class="tab" onclick="showTab('erase')">🗑️ Xóa</button>
+            <button class="tab active" onclick="showTab('info')">📊 Info</button>
+            <button class="tab" onclick="showTab('read')">📖 Read</button>
+            <button class="tab" onclick="showTab('write')">✍️ Write</button>
+            <button class="tab" onclick="showTab('erase')">🗑️ Erase</button>
             <button class="tab" onclick="showTab('hex')">🔍 Hex Viewer</button>
         </div>
 )rawliteral";
@@ -301,14 +301,14 @@ const char HTML_FOOTER[] PROGMEM = R"rawliteral(
                     showLoading(false);
                     if (data.success) {
                         showResult('readResult', 
-                            `✓ Địa chỉ 0x${parseInt(addr,16).toString(16).toUpperCase()}: 0x${data.value.toString(16).toUpperCase().padStart(2,'0')} (${data.value})`);
+                            `✓ Address 0x${parseInt(addr,16).toString(16).toUpperCase()}: 0x${data.value.toString(16).toUpperCase().padStart(2,'0')} (${data.value})`);
                     } else {
                         showResult('readResult', '✗ ' + data.error, true);
                     }
                 })
                 .catch(e => {
                     showLoading(false);
-                    showResult('readResult', '✗ Lỗi: ' + e, true);
+                    showResult('readResult', '✗ Error: ' + e, true);
                 });
         }
         
@@ -325,26 +325,26 @@ const char HTML_FOOTER[] PROGMEM = R"rawliteral(
                     .then(data => {
                         showLoading(false);
                         if (data.success) {
-                            showResult('writeResult', `✓ Đã ghi 0x${parseInt(value,16).toString(16).toUpperCase()} vào 0x${parseInt(addr,16).toString(16).toUpperCase()}`);
+                            showResult('writeResult', `✓ Wrote 0x${parseInt(value,16).toString(16).toUpperCase()} to 0x${parseInt(addr,16).toString(16).toUpperCase()}`);
                         } else {
                             showResult('writeResult', '✗ ' + data.error, true);
                         }
                     })
                     .catch(e => {
                         showLoading(false);
-                        showResult('writeResult', '✗ Lỗi: ' + e, true);
+                        showResult('writeResult', '✗ Error: ' + e, true);
                     });
             } else {
                 const dataStr = document.getElementById('writeData').value;
                 const hexBytes = dataStr.replace(/\s+/g, '').match(/.{1,2}/g);
                 
                 if (!hexBytes || hexBytes.length === 0) {
-                    showResult('writeResult', '✗ Vui lòng nhập dữ liệu hex!', true);
+                    showResult('writeResult', '✗ Please enter hex data!', true);
                     return;
                 }
                 
                 if (hexBytes.length > 256) {
-                    showResult('writeResult', '✗ Tối đa 256 bytes! Bạn nhập ' + hexBytes.length + ' bytes.', true);
+                    showResult('writeResult', '✗ Max 256 bytes! You entered ' + hexBytes.length + ' bytes.', true);
                     return;
                 }
                 
@@ -356,14 +356,14 @@ const char HTML_FOOTER[] PROGMEM = R"rawliteral(
                     .then(data => {
                         showLoading(false);
                         if (data.success) {
-                            showResult('writeResult', `✓ Đã ghi ${hexBytes.length} bytes vào 0x${parseInt(addr,16).toString(16).toUpperCase()}`);
+                            showResult('writeResult', `✓ Wrote ${hexBytes.length} bytes to 0x${parseInt(addr,16).toString(16).toUpperCase()}`);
                         } else {
                             showResult('writeResult', '✗ ' + data.error, true);
                         }
                     })
                     .catch(e => {
                         showLoading(false);
-                        showResult('writeResult', '✗ Lỗi: ' + e, true);
+                        showResult('writeResult', '✗ Error: ' + e, true);
                     });
             }
         }
@@ -372,7 +372,7 @@ const char HTML_FOOTER[] PROGMEM = R"rawliteral(
             const type = document.getElementById('eraseType').value;
             const addr = document.getElementById('eraseAddr').value;
             
-            if (!confirm('Bạn chắc chắn muốn xóa? Dữ liệu sẽ mất!')) return;
+            if (!confirm('Are you sure you want to erase? Data will be lost!')) return;
             
             showLoading(true);
             
@@ -381,14 +381,14 @@ const char HTML_FOOTER[] PROGMEM = R"rawliteral(
                 .then(data => {
                     showLoading(false);
                     if (data.success) {
-                        showResult('eraseResult', `✓ Đã xóa ${type} tại 0x${parseInt(addr,16).toString(16).toUpperCase()}`);
+                        showResult('eraseResult', `✓ Erased ${type} at 0x${parseInt(addr,16).toString(16).toUpperCase()}`);
                     } else {
                         showResult('eraseResult', '✗ ' + data.error, true);
                     }
                 })
                 .catch(e => {
                     showLoading(false);
-                    showResult('eraseResult', '✗ Lỗi: ' + e, true);
+                    showResult('eraseResult', '✗ Error: ' + e, true);
                 });
         }
         
@@ -443,56 +443,56 @@ void handleRoot() {
   html += R"rawliteral(
         <div id="info" class="content active">
             <div class="card">
-                <h3>📊 Thông Tin Chip</h3>
+                <h3>📊 Chip Information</h3>
                 <div class="info-grid">
                     <div class="info-item"><label>Device ID</label><div class="value" id="deviceId">-</div></div>
                     <div class="info-item"><label>JEDEC ID</label><div class="value" id="jedecId">-</div></div>
                     <div class="info-item"><label>Unique ID</label><div class="value" id="uniqueId">-</div></div>
-                    <div class="info-item"><label>Dung Lượng</label><div class="value" id="capacity">-</div></div>
-                    <div class="info-item"><label>Trạng Thái</label><div class="value" id="status">-</div></div>
+                    <div class="info-item"><label>Capacity</label><div class="value" id="capacity">-</div></div>
+                    <div class="info-item"><label>Status</label><div class="value" id="status">-</div></div>
                 </div>
             </div>
         </div>
         <div id="read" class="content">
             <div class="card">
-                <h3>📖 Đọc Dữ Liệu</h3>
-                <div class="form-group"><label>Địa chỉ (hex)</label><input type="text" id="readAddr" value="1000"></div>
-                <button class="btn btn-primary" onclick="readByte()">Đọc Byte</button>
+                <h3>📖 Read Data</h3>
+                <div class="form-group"><label>Address (hex)</label><input type="text" id="readAddr" value="1000"></div>
+                <button class="btn btn-primary" onclick="readByte()">Read Byte</button>
                 <div id="readResult" class="result"></div>
             </div>
         </div>
         <div id="write" class="content">
             <div class="card">
-                <h3>✍️ Ghi Dữ Liệu</h3>
-                <div class="form-group"><label>Địa chỉ (hex)</label><input type="text" id="writeAddr" value="1000"></div>
-                <div class="form-group"><label>Chế độ</label><select id="writeMode" onchange="toggleWriteMode()"><option value="single">Ghi 1 Byte</option><option value="multiple">Ghi Nhiều Byte (max 256)</option></select></div>
-                <div id="singleByteForm"><div class="form-group"><label>Giá trị (hex)</label><input type="text" id="writeValue" value="AA"></div></div>
-                <div id="multipleByteForm" style="display:none;"><div class="form-group"><label>Dữ liệu (hex, max 256 bytes)</label><textarea id="writeData" rows="4" style="width:100%;padding:10px;border:2px solid #ddd;border-radius:5px;font-family:monospace;"></textarea><small style="color:#666;">VD: AA BB CC DD</small></div></div>
-                <button class="btn btn-primary" onclick="writeData()">Ghi</button>
+                <h3>✍️ Write Data</h3>
+                <div class="form-group"><label>Address (hex)</label><input type="text" id="writeAddr" value="1000"></div>
+                <div class="form-group"><label>Mode</label><select id="writeMode" onchange="toggleWriteMode()"><option value="single">Write 1 Byte</option><option value="multiple">Write Multiple Bytes (max 256)</option></select></div>
+                <div id="singleByteForm"><div class="form-group"><label>Value (hex)</label><input type="text" id="writeValue" value="AA"></div></div>
+                <div id="multipleByteForm" style="display:none;"><div class="form-group"><label>Data (hex, max 256 bytes)</label><textarea id="writeData" rows="4" style="width:100%;padding:10px;border:2px solid #ddd;border-radius:5px;font-family:monospace;"></textarea><small style="color:#666;">Example: AA BB CC DD</small></div></div>
+                <button class="btn btn-primary" onclick="writeData()">Write</button>
                 <div id="writeResult" class="result"></div>
-                <p style="margin-top:15px;color:#666;font-size:14px;">⚠️ Ghi 1 byte: R-M-W an toàn | Ghi nhiều: Cần xóa trước</p>
+                <p style="margin-top:15px;color:#666;font-size:14px;">⚠️ Single byte: R-M-W safe | Multiple: Auto erase before write</p>
             </div>
         </div>
         <div id="erase" class="content">
             <div class="card">
-                <h3>🗑️ Xóa</h3>
-                <div class="form-group"><label>Loại</label><select id="eraseType"><option value="sector">Sector (4KB)</option><option value="block32">Block 32KB</option><option value="block64">Block 64KB</option></select></div>
-                <div class="form-group"><label>Địa chỉ (hex)</label><input type="text" id="eraseAddr" value="1000"></div>
-                <button class="btn btn-danger" onclick="eraseMemory()">Xóa</button>
+                <h3>🗑️ Erase</h3>
+                <div class="form-group"><label>Type</label><select id="eraseType"><option value="sector">Sector (4KB)</option><option value="block32">Block 32KB</option><option value="block64">Block 64KB</option></select></div>
+                <div class="form-group"><label>Address (hex)</label><input type="text" id="eraseAddr" value="1000"></div>
+                <button class="btn btn-danger" onclick="eraseMemory()">Erase</button>
                 <div id="eraseResult" class="result"></div>
             </div>
         </div>
         <div id="hex" class="content">
             <div class="card">
                 <h3>🔍 Hex Viewer</h3>
-                <div class="form-group"><label>Địa chỉ (hex)</label><input type="text" id="hexAddr" value="0"></div>
-                <div class="form-group"><label>Số byte (max 256)</label><input type="number" id="hexLen" value="256" min="1" max="256"></div>
-                <button class="btn btn-primary" onclick="loadHexView()">Xem</button>
+                <div class="form-group"><label>Address (hex)</label><input type="text" id="hexAddr" value="0"></div>
+                <div class="form-group"><label>Length (max 256)</label><input type="number" id="hexLen" value="256" min="1" max="256"></div>
+                <button class="btn btn-primary" onclick="loadHexView()">View</button>
                 <div id="hexResult" class="result"></div>
                 <div id="hexOutput" class="hex-viewer" style="margin-top:20px;"></div>
             </div>
         </div>
-        <div id="loading" class="loading"><div class="spinner"></div><p>Đang xử lý...</p></div>
+        <div id="loading" class="loading"><div class="spinner"></div><p>Processing...</p></div>
   )rawliteral";
   
   html += FPSTR(HTML_FOOTER);
@@ -784,3 +784,5 @@ void loop() {
   server.handleClient();
   delay(2);
 }
+
+
