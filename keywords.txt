@@ -1,0 +1,58 @@
+#######################################
+# Syntax Coloring Map For W25Q16JV
+#######################################
+
+#######################################
+# Datatypes (KEYWORD1)
+#######################################
+
+W25Q16JV	KEYWORD1
+W25Q16JV_Error	KEYWORD1
+
+#######################################
+# Methods and Functions (KEYWORD2)
+#######################################
+
+begin	KEYWORD2
+readDeviceID	KEYWORD2
+readJEDECID	KEYWORD2
+readUniqueID	KEYWORD2
+readStatusReg1	KEYWORD2
+readStatusReg2	KEYWORD2
+readStatusReg3	KEYWORD2
+writeStatusReg1	KEYWORD2
+writeStatusReg2	KEYWORD2
+isBusy	KEYWORD2
+readByte	KEYWORD2
+readData	KEYWORD2
+fastRead	KEYWORD2
+eraseSector	KEYWORD2
+eraseBlock32K	KEYWORD2
+eraseBlock64K	KEYWORD2
+eraseChip	KEYWORD2
+writeEnable	KEYWORD2
+writeDisable	KEYWORD2
+writePage	KEYWORD2
+writeData	KEYWORD2
+writeByte	KEYWORD2
+modifyBytes	KEYWORD2
+powerDown	KEYWORD2
+releasePowerDown	KEYWORD2
+getCapacity	KEYWORD2
+isValidAddress	KEYWORD2
+
+#######################################
+# Constants (LITERAL1)
+#######################################
+
+W25Q_OK	LITERAL1
+W25Q_ERROR_INIT	LITERAL1
+W25Q_ERROR_BUSY_TIMEOUT	LITERAL1
+W25Q_ERROR_VERIFY_FAILED	LITERAL1
+W25Q_ERROR_INVALID_ADDRESS	LITERAL1
+W25Q_ERROR_INVALID_LENGTH	LITERAL1
+W25Q16JV_MEMORY_SIZE	LITERAL1
+W25Q16JV_PAGE_SIZE	LITERAL1
+W25Q16JV_SECTOR_SIZE	LITERAL1
+W25Q16JV_BLOCK_SIZE_32K	LITERAL1
+W25Q16JV_BLOCK_SIZE_64K	LITERAL1
