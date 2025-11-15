@@ -6,8 +6,8 @@
  * - Đọc/ghi byte
  * - Xóa sector/block
  * - Xem thông tin chip
- * - Hex viewer (256 bytes max)
- * - Ghi nhiều byte (256 bytes max)
+ * - Hex viewer
+ * - Upload/download file
  */
 
 #include <Arduino.h>
@@ -18,21 +18,16 @@
 #include <ESPmDNS.h>
 
 // ========== CẤU HÌNH WIFI ==========
-// ESP32C3 sẽ phát WiFi AP (Access Point)
-const char* AP_SSID = "W25Q16JV_Flash";     // Tên WiFi phát ra
-const char* AP_PASSWORD = "Test123456";     // Mật khẩu WiFi (tối thiểu 8 ký tự)
-IPAddress AP_IP(192, 168, 4, 1);            // IP của ESP32C3
-IPAddress AP_GATEWAY(192, 168, 4, 1);
-IPAddress AP_SUBNET(255, 255, 255, 0);
+const char* WIFI_SSID = "YOUR_WIFI_SSID";      // Thay bằng tên WiFi của bạn
+const char* WIFI_PASSWORD = "YOUR_WIFI_PASS";  // Thay bằng mật khẩu WiFi
 
 // ========== CẤU HÌNH SPI ==========
 #define SCK_PIN  2
 #define MISO_PIN 7
 #define MOSI_PIN 6
 #define CS_PIN   10
-#define SPI_FREQ 10000000  // 10MHz
 
-W25Q16JV flash(CS_PIN, SPI_FREQ);
+W25Q16JV flash(CS_PIN);
 WebServer server(80);
 
 // ========== HTML/CSS/JS ==========
@@ -153,6 +148,10 @@ const char HTML_HEADER[] PROGMEM = R"rawliteral(
             transform: translateY(-2px);
             box-shadow: 0 5px 15px rgba(245, 87, 108, 0.4);
         }
+        .btn-success {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+        }
         .result {
             margin-top: 20px;
             padding: 15px;
@@ -177,29 +176,11 @@ const char HTML_HEADER[] PROGMEM = R"rawliteral(
             border-radius: 5px;
             overflow-x: auto;
             font-size: 14px;
-            line-height: 1.8;
-            white-space: pre-wrap;
-            word-break: keep-all;
-            overflow-wrap: normal;
+            line-height: 1.6;
         }
-        .hex-address { 
-            color: #569cd6; 
-            font-weight: bold;
-            display: inline-block;
-            white-space: nowrap;
-        }
-        .hex-data { 
-            color: #ce9178;
-            letter-spacing: 1px;
-            display: inline;
-            white-space: nowrap;
-        }
-        .hex-ascii { 
-            color: #4ec9b0;
-            margin-left: 10px;
-            display: inline;
-            white-space: nowrap;
-        }
+        .hex-address { color: #569cd6; }
+        .hex-data { color: #ce9178; }
+        .hex-ascii { color: #4ec9b0; }
         .info-grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
@@ -263,8 +244,11 @@ const char HTML_FOOTER[] PROGMEM = R"rawliteral(
     
     <script>
         function showTab(tabName) {
+            // Hide all contents
             document.querySelectorAll('.content').forEach(el => el.classList.remove('active'));
             document.querySelectorAll('.tab').forEach(el => el.classList.remove('active'));
+            
+            // Show selected
             document.getElementById(tabName).classList.add('active');
             event.target.classList.add('active');
         }
@@ -291,6 +275,7 @@ const char HTML_FOOTER[] PROGMEM = R"rawliteral(
             document.getElementById('loading').style.display = show ? 'block' : 'none';
         }
         
+        // Đọc byte
         function readByte() {
             const addr = document.getElementById('readAddr').value;
             showLoading(true);
@@ -312,11 +297,13 @@ const char HTML_FOOTER[] PROGMEM = R"rawliteral(
                 });
         }
         
+        // Ghi dữ liệu (1 byte hoặc nhiều byte)
         function writeData() {
             const addr = document.getElementById('writeAddr').value;
             const mode = document.getElementById('writeMode').value;
             
             if (mode === 'single') {
+                // Ghi 1 byte
                 const value = document.getElementById('writeValue').value;
                 showLoading(true);
                 
@@ -335,6 +322,7 @@ const char HTML_FOOTER[] PROGMEM = R"rawliteral(
                         showResult('writeResult', '✗ Lỗi: ' + e, true);
                     });
             } else {
+                // Ghi nhiều byte
                 const dataStr = document.getElementById('writeData').value;
                 const hexBytes = dataStr.replace(/\s+/g, '').match(/.{1,2}/g);
                 
@@ -368,6 +356,7 @@ const char HTML_FOOTER[] PROGMEM = R"rawliteral(
             }
         }
         
+        // Xóa
         function eraseMemory() {
             const type = document.getElementById('eraseType').value;
             const addr = document.getElementById('eraseAddr').value;
@@ -392,6 +381,7 @@ const char HTML_FOOTER[] PROGMEM = R"rawliteral(
                 });
         }
         
+        // Hex viewer
         function loadHexView() {
             const addr = document.getElementById('hexAddr').value;
             const len = document.getElementById('hexLen').value;
@@ -409,10 +399,11 @@ const char HTML_FOOTER[] PROGMEM = R"rawliteral(
                 })
                 .catch(e => {
                     showLoading(false);
-                    showResult('hexResult', '✗ ' + e, true);
+                    showResult('hexResult', '✗ Lỗi: ' + e, true);
                 });
         }
         
+        // Load info khi trang load
         window.onload = function() {
             fetch('/api/info')
                 .then(r => r.json())
@@ -429,73 +420,149 @@ const char HTML_FOOTER[] PROGMEM = R"rawliteral(
 </html>
 )rawliteral";
 
-void handleRoot();
-void handleInfo();
-void handleRead();
-void handleWrite();
-void handleWriteMulti();
-void handleErase();
-void handleHexDump();
+// ========== API HANDLERS ==========
 
 void handleRoot() {
   String html = FPSTR(HTML_HEADER);
   
+  // Tab: Thông tin
   html += R"rawliteral(
         <div id="info" class="content active">
             <div class="card">
                 <h3>📊 Thông Tin Chip</h3>
                 <div class="info-grid">
-                    <div class="info-item"><label>Device ID</label><div class="value" id="deviceId">-</div></div>
-                    <div class="info-item"><label>JEDEC ID</label><div class="value" id="jedecId">-</div></div>
-                    <div class="info-item"><label>Unique ID</label><div class="value" id="uniqueId">-</div></div>
-                    <div class="info-item"><label>Dung Lượng</label><div class="value" id="capacity">-</div></div>
-                    <div class="info-item"><label>Trạng Thái</label><div class="value" id="status">-</div></div>
+                    <div class="info-item">
+                        <label>Device ID</label>
+                        <div class="value" id="deviceId">-</div>
+                    </div>
+                    <div class="info-item">
+                        <label>JEDEC ID</label>
+                        <div class="value" id="jedecId">-</div>
+                    </div>
+                    <div class="info-item">
+                        <label>Unique ID</label>
+                        <div class="value" id="uniqueId">-</div>
+                    </div>
+                    <div class="info-item">
+                        <label>Dung Lượng</label>
+                        <div class="value" id="capacity">-</div>
+                    </div>
+                    <div class="info-item">
+                        <label>Trạng Thái</label>
+                        <div class="value" id="status">-</div>
+                    </div>
                 </div>
             </div>
         </div>
+  )rawliteral";
+  
+  // Tab: Đọc
+  html += R"rawliteral(
         <div id="read" class="content">
             <div class="card">
                 <h3>📖 Đọc Dữ Liệu</h3>
-                <div class="form-group"><label>Địa chỉ (hex)</label><input type="text" id="readAddr" value="1000"></div>
+                <div class="form-group">
+                    <label>Địa chỉ (hex, ví dụ: 1000)</label>
+                    <input type="text" id="readAddr" placeholder="0x1000" value="1000">
+                </div>
                 <button class="btn btn-primary" onclick="readByte()">Đọc Byte</button>
                 <div id="readResult" class="result"></div>
             </div>
         </div>
+  )rawliteral";
+  
+  // Tab: Ghi
+  html += R"rawliteral(
         <div id="write" class="content">
             <div class="card">
                 <h3>✍️ Ghi Dữ Liệu</h3>
-                <div class="form-group"><label>Địa chỉ (hex)</label><input type="text" id="writeAddr" value="1000"></div>
-                <div class="form-group"><label>Chế độ</label><select id="writeMode" onchange="toggleWriteMode()"><option value="single">Ghi 1 Byte</option><option value="multiple">Ghi Nhiều Byte (max 256)</option></select></div>
-                <div id="singleByteForm"><div class="form-group"><label>Giá trị (hex)</label><input type="text" id="writeValue" value="AA"></div></div>
-                <div id="multipleByteForm" style="display:none;"><div class="form-group"><label>Dữ liệu (hex, max 256 bytes)</label><textarea id="writeData" rows="4" style="width:100%;padding:10px;border:2px solid #ddd;border-radius:5px;font-family:monospace;"></textarea><small style="color:#666;">VD: AA BB CC DD</small></div></div>
-                <button class="btn btn-primary" onclick="writeData()">Ghi</button>
+                <div class="form-group">
+                    <label>Địa chỉ (hex)</label>
+                    <input type="text" id="writeAddr" placeholder="0x1000" value="1000">
+                </div>
+                <div class="form-group">
+                    <label>Chế độ ghi</label>
+                    <select id="writeMode" onchange="toggleWriteMode()">
+                        <option value="single">Ghi 1 Byte</option>
+                        <option value="multiple">Ghi Nhiều Byte (tối đa 256)</option>
+                    </select>
+                </div>
+                <div id="singleByteForm">
+                    <div class="form-group">
+                        <label>Giá trị (hex, 00-FF)</label>
+                        <input type="text" id="writeValue" placeholder="0xAA" value="AA">
+                    </div>
+                </div>
+                <div id="multipleByteForm" style="display:none;">
+                    <div class="form-group">
+                        <label>Dữ liệu (hex, cách nhau bởi dấu cách, tối đa 256 bytes)</label>
+                        <textarea id="writeData" placeholder="AA BB CC DD EE FF..." rows="4" style="width:100%;padding:10px;border:2px solid #ddd;border-radius:5px;font-family:monospace;"></textarea>
+                        <small style="color:#666;">Ví dụ: AA BB CC DD hoặc AABBCCDD (tối đa 256 bytes)</small>
+                    </div>
+                </div>
+                <button class="btn btn-primary" onclick="writeData()">Ghi Dữ Liệu</button>
                 <div id="writeResult" class="result"></div>
-                <p style="margin-top:15px;color:#666;font-size:14px;">⚠️ Ghi 1 byte: R-M-W an toàn | Ghi nhiều: Cần xóa trước</p>
+                <p style="margin-top:15px; color:#666; font-size:14px;">
+                    ⚠️ <strong>Ghi 1 byte:</strong> Sử dụng Read-Modify-Write (không ảnh hưởng byte khác)<br>
+                    ⚠️ <strong>Ghi nhiều byte:</strong> Cần xóa sector trước (dữ liệu cũ sẽ mất)
+                </p>
             </div>
         </div>
+  )rawliteral";
+  
+  // Tab: Xóa
+  html += R"rawliteral(
         <div id="erase" class="content">
             <div class="card">
-                <h3>🗑️ Xóa</h3>
-                <div class="form-group"><label>Loại</label><select id="eraseType"><option value="sector">Sector (4KB)</option><option value="block32">Block 32KB</option><option value="block64">Block 64KB</option></select></div>
-                <div class="form-group"><label>Địa chỉ (hex)</label><input type="text" id="eraseAddr" value="1000"></div>
+                <h3>🗑️ Xóa Dữ Liệu</h3>
+                <div class="form-group">
+                    <label>Loại xóa</label>
+                    <select id="eraseType">
+                        <option value="sector">Sector (4KB)</option>
+                        <option value="block32">Block 32KB</option>
+                        <option value="block64">Block 64KB</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>Địa chỉ (hex)</label>
+                    <input type="text" id="eraseAddr" placeholder="0x1000" value="1000">
+                </div>
                 <button class="btn btn-danger" onclick="eraseMemory()">Xóa</button>
                 <div id="eraseResult" class="result"></div>
+                <p style="margin-top:15px; color:#d9534f; font-size:14px;">
+                    ⚠️ CẢNH BÁO: Dữ liệu sẽ bị xóa vĩnh viễn! Thao tác không thể hoàn tác.
+                </p>
             </div>
         </div>
+  )rawliteral";
+  
+  // Tab: Hex Viewer
+  html += R"rawliteral(
         <div id="hex" class="content">
             <div class="card">
                 <h3>🔍 Hex Viewer</h3>
-                <div class="form-group"><label>Địa chỉ (hex)</label><input type="text" id="hexAddr" value="0"></div>
-                <div class="form-group"><label>Số byte (max 256)</label><input type="number" id="hexLen" value="256" min="1" max="256"></div>
+                <div class="form-group">
+                    <label>Địa chỉ bắt đầu (hex)</label>
+                    <input type="text" id="hexAddr" placeholder="0x0000" value="0">
+                </div>
+                <div class="form-group">
+                    <label>Số byte (tối đa 256 - hiển thị 16 hàng x 16 bytes)</label>
+                    <input type="number" id="hexLen" value="256" min="1" max="256">
+                </div>
                 <button class="btn btn-primary" onclick="loadHexView()">Xem</button>
                 <div id="hexResult" class="result"></div>
                 <div id="hexOutput" class="hex-viewer" style="margin-top:20px;"></div>
             </div>
         </div>
-        <div id="loading" class="loading"><div class="spinner"></div><p>Đang xử lý...</p></div>
+        
+        <div id="loading" class="loading">
+            <div class="spinner"></div>
+            <p style="margin-top:10px;">Đang xử lý...</p>
+        </div>
   )rawliteral";
   
   html += FPSTR(HTML_FOOTER);
+  
   server.send(200, "text/html", html);
 }
 
@@ -503,13 +570,21 @@ void handleInfo() {
   uint16_t deviceId = flash.readDeviceID();
   uint32_t jedecId = flash.readJEDECID();
   uint64_t uniqueId = flash.readUniqueID();
+  uint32_t capacity = flash.getCapacity();
+  bool busy = flash.isBusy();
   
-  char buf[200];
-  sprintf(buf, "{\"deviceId\":%d,\"jedecId\":%u,\"uniqueId\":\"%08X%08X\",\"capacity\":%u,\"busy\":%s}",
-          deviceId, jedecId, (uint32_t)(uniqueId >> 32), (uint32_t)(uniqueId & 0xFFFFFFFF),
-          flash.getCapacity(), flash.isBusy() ? "true" : "false");
+  char uniqueIdStr[20];
+  sprintf(uniqueIdStr, "%08X%08X", (uint32_t)(uniqueId >> 32), (uint32_t)(uniqueId & 0xFFFFFFFF));
   
-  server.send(200, "application/json", buf);
+  String json = "{";
+  json += "\"deviceId\":" + String(deviceId) + ",";
+  json += "\"jedecId\":" + String(jedecId) + ",";
+  json += "\"uniqueId\":\"" + String(uniqueIdStr) + "\",";
+  json += "\"capacity\":" + String(capacity) + ",";
+  json += "\"busy\":" + String(busy ? "true" : "false");
+  json += "}";
+  
+  server.send(200, "application/json", json);
 }
 
 void handleRead() {
@@ -527,9 +602,8 @@ void handleRead() {
   
   uint8_t value = flash.readByte(addr);
   
-  char buf[50];
-  sprintf(buf, "{\"success\":true,\"value\":%d}", value);
-  server.send(200, "application/json", buf);
+  String json = "{\"success\":true,\"value\":" + String(value) + "}";
+  server.send(200, "application/json", json);
 }
 
 void handleWrite() {
@@ -551,9 +625,8 @@ void handleWrite() {
   if (result == 0) {
     server.send(200, "application/json", "{\"success\":true}");
   } else {
-    char buf[100];
-    sprintf(buf, "{\"success\":false,\"error\":\"Lỗi ghi: %d\"}", result);
-    server.send(200, "application/json", buf);
+    String json = "{\"success\":false,\"error\":\"Lỗi ghi: " + String(result) + "\"}";
+    server.send(200, "application/json", json);
   }
 }
 
@@ -565,10 +638,12 @@ void handleWriteMulti() {
   
   uint32_t addr = strtol(server.arg("addr").c_str(), NULL, 16);
   String dataStr = server.arg("data");
+  
+  // Chuyển hex string thành byte array
   uint16_t len = dataStr.length() / 2;
   
   if (len == 0 || len > 256) {
-    server.send(200, "application/json", "{\"success\":false,\"error\":\"Độ dài không hợp lệ (1-256)\"}");
+    server.send(200, "application/json", "{\"success\":false,\"error\":\"Độ dài không hợp lệ (1-256 bytes)\"}");
     return;
   }
   
@@ -583,33 +658,11 @@ void handleWriteMulti() {
     buffer[i] = strtol(byteStr.c_str(), NULL, 16);
   }
   
-  // Tính các sector cần xử lý
-  uint32_t startSector = addr / 4096;
-  uint32_t endSector = (addr + len - 1) / 4096;
+  // Ghi dữ liệu
+  flash.writeData(addr, buffer, len);
   
-  // Xử lý từng sector
-  for (uint32_t sectorNum = startSector; sectorNum <= endSector; sectorNum++) {
-    uint32_t sectorAddr = sectorNum * 4096;
-    uint8_t sectorBuffer[4096];
-    
-    // Đọc toàn bộ sector ra
-    flash.readData(sectorAddr, sectorBuffer, 4096);
-    
-    // Merge dữ liệu mới vào sector buffer
-    uint32_t writeStart = (addr > sectorAddr) ? (addr - sectorAddr) : 0;
-    uint32_t dataStart = (sectorAddr > addr) ? (sectorAddr - addr) : 0;
-    uint32_t writeLen = min((uint32_t)len - dataStart, 4096 - writeStart);
-    
-    memcpy(sectorBuffer + writeStart, buffer + dataStart, writeLen);
-    
-    // Erase và ghi lại toàn bộ sector
-    flash.eraseSector(sectorAddr);
-    flash.writeData(sectorAddr, sectorBuffer, 4096);
-  }
-  
-  char buf[50];
-  sprintf(buf, "{\"success\":true,\"length\":%d}", len);
-  server.send(200, "application/json", buf);
+  String json = "{\"success\":true,\"length\":" + String(len) + "}";
+  server.send(200, "application/json", json);
 }
 
 void handleErase() {
@@ -626,10 +679,13 @@ void handleErase() {
     return;
   }
   
-  if (type == "sector") flash.eraseSector(addr);
-  else if (type == "block32") flash.eraseBlock32K(addr);
-  else if (type == "block64") flash.eraseBlock64K(addr);
-  else {
+  if (type == "sector") {
+    flash.eraseSector(addr);
+  } else if (type == "block32") {
+    flash.eraseBlock32K(addr);
+  } else if (type == "block64") {
+    flash.eraseBlock64K(addr);
+  } else {
     server.send(400, "application/json", "{\"success\":false,\"error\":\"Invalid type\"}");
     return;
   }
@@ -657,60 +713,43 @@ void handleHexDump() {
   
   String html = "";
   for (uint16_t i = 0; i < len; i++) {
-    // Bắt đầu dòng mới (mỗi dòng 16 bytes)
     if (i % 16 == 0) {
-      // In phần ASCII của dòng trước (nếu có)
       if (i > 0) {
-        html += "  <span class=\\\"hex-ascii\\\">| ";
+        // ASCII
+        html += " <span class='hex-ascii'>| ";
         for (int j = i - 16; j < i; j++) {
           char c = (buffer[j] >= 32 && buffer[j] <= 126) ? buffer[j] : '.';
-          // Escape đặc biệt cho JSON
-          if (c == '\\') html += "\\\\\\\\";
-          else if (c == '"') html += "\\\\\\\"";
-          else html += String(c);
+          html += String(c);
         }
-        html += " |</span><br>";
+        html += "</span>";
       }
-      // In địa chỉ
+      html += "\n<span class='hex-address'>";
       char addrStr[10];
       sprintf(addrStr, "%06X", addr + i);
-      html += "<span class=\\\"hex-address\\\">" + String(addrStr) + ":</span>  ";
+      html += String(addrStr) + ":</span> ";
     }
     
-    // In byte hex
     char hexStr[4];
-    sprintf(hexStr, "%02X", buffer[i]);
-    html += "<span class=\\\"hex-data\\\">" + String(hexStr) + "</span> ";
-    
-    // Thêm khoảng cách giữa 2 nhóm 8 bytes
-    if (i % 16 == 7) {
-      html += " ";
-    }
+    sprintf(hexStr, "%02X ", buffer[i]);
+    html += "<span class='hex-data'>" + String(hexStr) + "</span>";
   }
   
-  // Xử lý dòng cuối cùng (nếu không đủ 16 bytes)
-  int remaining = len % 16;
-  if (remaining != 0) {
-    // Padding để căn chỉnh phần ASCII
-    for (int p = remaining; p < 16; p++) {
+  // Last line ASCII
+  if (len % 16 != 0) {
+    for (int p = 0; p < (16 - (len % 16)); p++) {
       html += "   ";
-      if (p == 7) html += " ";
     }
   }
-  
-  // In phần ASCII của dòng cuối
-  html += "  <span class=\\\"hex-ascii\\\">| ";
+  html += " <span class='hex-ascii'>| ";
   int start = (len / 16) * 16;
   for (int j = start; j < len; j++) {
     char c = (buffer[j] >= 32 && buffer[j] <= 126) ? buffer[j] : '.';
-    // Escape đặc biệt cho JSON
-    if (c == '\\') html += "\\\\\\\\";
-    else if (c == '"') html += "\\\\\\\"";
-    else html += String(c);
+    html += String(c);
   }
-  html += " |</span>";
+  html += "</span>";
   
-  server.send(200, "application/json", "{\"success\":true,\"html\":\"" + html + "\"}");
+  String json = "{\"success\":true,\"html\":\"" + html + "\"}";
+  server.send(200, "application/json", json);
 }
 
 void setup() {
@@ -721,38 +760,54 @@ void setup() {
   Serial.println("║   W25Q16JV Web Server - ESP32C3       ║");
   Serial.println("╚════════════════════════════════════════╝\n");
   
+  // Khởi tạo SPI
   Serial.println("1. Khởi tạo SPI...");
   SPI.begin(SCK_PIN, MISO_PIN, MOSI_PIN, CS_PIN);
-  Serial.println("   ✓ SPI sẵn sàng\n");
+  Serial.println("   ✓ SPI đã sẵn sàng\n");
   
+  // Khởi tạo Flash
   Serial.println("2. Khởi tạo W25Q16JV...");
   if (!flash.begin()) {
-    Serial.println("   ✗ Lỗi khởi tạo flash!");
+    Serial.println("   ✗ Không thể khởi tạo flash!");
     while (1) delay(1000);
   }
-  Serial.println("   ✓ Flash sẵn sàng\n");
+  Serial.println("   ✓ Flash đã sẵn sàng\n");
   
-  Serial.println("3. Khởi động WiFi Access Point...");
-  Serial.printf("   SSID: %s\n", AP_SSID);
-  Serial.printf("   Password: %s\n", AP_PASSWORD);
+  // Kết nối WiFi
+  Serial.println("3. Kết nối WiFi...");
+  Serial.printf("   SSID: %s\n", WIFI_SSID);
   
-  WiFi.mode(WIFI_AP);
-  WiFi.softAPConfig(AP_IP, AP_GATEWAY, AP_SUBNET);
+  WiFi.mode(WIFI_STA);
+  WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
   
-  if (!WiFi.softAP(AP_SSID, AP_PASSWORD)) {
-    Serial.println("\n   ✗ Không thể khởi động AP!");
+  int attempts = 0;
+  while (WiFi.status() != WL_CONNECTED && attempts < 30) {
+    delay(500);
+    Serial.print(".");
+    attempts++;
+  }
+  
+  if (WiFi.status() != WL_CONNECTED) {
+    Serial.println("\n   ✗ Không thể kết nối WiFi!");
+    Serial.println("   → Kiểm tra SSID và password trong code");
     while (1) delay(1000);
   }
   
-  delay(1000);
+  Serial.println("\n   ✓ Đã kết nối WiFi!\n");
+  Serial.print("   IP Address: ");
+  Serial.println(WiFi.localIP());
+  Serial.print("   Signal: ");
+  Serial.print(WiFi.RSSI());
+  Serial.println(" dBm\n");
   
-  Serial.println("\n   ✓ WiFi AP đã khởi động!\n");
-  Serial.print("   IP: ");
-  Serial.println(WiFi.softAPIP());
-  Serial.printf("   Kết nối WiFi: %s\n", AP_SSID);
-  Serial.println("   Sau đó truy cập: http://192.168.4.1\n");
+  // Khởi động mDNS
+  if (MDNS.begin("w25q16jv")) {
+    Serial.println("4. mDNS responder started");
+    Serial.println("   Access: http://w25q16jv.local\n");
+  }
   
-  Serial.println("4. Đăng ký API routes...");
+  // Đăng ký routes
+  Serial.println("5. Đăng ký API routes...");
   server.on("/", handleRoot);
   server.on("/api/info", handleInfo);
   server.on("/api/read", handleRead);
@@ -760,24 +815,25 @@ void setup() {
   server.on("/api/writemulti", handleWriteMulti);
   server.on("/api/erase", handleErase);
   server.on("/api/hexdump", handleHexDump);
-  Serial.println("   ✓ Routes sẵn sàng\n");
+  Serial.println("   ✓ Routes đã sẵn sàng\n");
   
+  // Start server
   server.begin();
   Serial.println("╔════════════════════════════════════════╗");
   Serial.println("║        🌐 SERVER RUNNING! 🌐          ║");
   Serial.println("╚════════════════════════════════════════╝\n");
-  Serial.print("📱 http://");
-  Serial.println(WiFi.softAPIP());
-  Serial.println("   hoặc http://192.168.4.1\n");
-  Serial.println("📶 Kết nối WiFi AP:");
-  Serial.printf("   SSID: %s\n", AP_SSID);
-  Serial.printf("   Password: %s\n\n", AP_PASSWORD);
+  Serial.println("📱 Truy cập:");
+  Serial.print("   http://");
+  Serial.println(WiFi.localIP());
+  Serial.println("   hoặc http://w25q16jv.local\n");
   
+  // Hiển thị info
   uint16_t deviceId = flash.readDeviceID();
   uint32_t jedecId = flash.readJEDECID();
-  Serial.println("📊 Chip:");
+  Serial.println("📊 Chip Info:");
   Serial.printf("   Device ID: 0x%04X\n", deviceId);
-  Serial.printf("   JEDEC ID: 0x%06X\n\n", jedecId);
+  Serial.printf("   JEDEC ID: 0x%06X\n", jedecId);
+  Serial.printf("   Capacity: %.2f MB\n\n", flash.getCapacity() / 1048576.0);
 }
 
 void loop() {
