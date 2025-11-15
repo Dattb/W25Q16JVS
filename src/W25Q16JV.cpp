@@ -5,6 +5,7 @@ W25Q16JV::W25Q16JV(uint8_t cs_pin, uint32_t spi_freq) {
     _cs_pin = cs_pin;
     _spi_freq = spi_freq;
     _spi = nullptr;
+    _detected_capacity = W25Q16JV_MEMORY_SIZE;  // Default 2MB
     _sector_buffer = nullptr;
     _buffer_allocated = false;
 }
@@ -25,11 +26,26 @@ bool W25Q16JV::begin(SPIClass* spi) {
     releasePowerDown();
     delayMicroseconds(3);
     
+    // Read JEDEC ID to detect chip capacity
+    uint32_t jedecId = readJEDECID();
+    uint8_t capacityCode = jedecId & 0xFF;
+    
+    // Capacity code format: 2^capacityCode bytes
+    // W25Q16: 0x15 = 2^21 = 2MB
+    // W25Q32: 0x16 = 2^22 = 4MB
+    // W25Q64: 0x17 = 2^23 = 8MB
+    // W25Q128: 0x18 = 2^24 = 16MB
+    if (capacityCode >= 0x14 && capacityCode <= 0x19) {
+        _detected_capacity = 1UL << capacityCode;
+    } else {
+        _detected_capacity = W25Q16JV_MEMORY_SIZE;  // Default 2MB
+    }
+    
     // Verify chip connection by reading device ID
     uint16_t id = readDeviceID();
     
-    // W25Q16JV should return 0xEF14 or 0x14EF depending on byte order
-    return (id == 0xEF14 || id == 0x14EF);
+    // W25Q16JV/W25Q32JVS should return 0xEF14/0xEF15 or reversed
+    return ((id >> 8) == 0xEF || (id & 0xFF) == 0xEF);
 }
 
 // ========== Milestone 1: Device Information ==========
@@ -399,7 +415,7 @@ void W25Q16JV::releasePowerDown() {
 // ========== Utility Functions ==========
 
 bool W25Q16JV::isValidAddress(uint32_t addr) {
-    return addr < W25Q16JV_MEMORY_SIZE;
+    return addr < _detected_capacity;
 }
 
 // ========== Private Functions ==========

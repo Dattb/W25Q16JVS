@@ -239,9 +239,9 @@ public:
     
     /**
      * @brief Get chip capacity in bytes
-     * @return Capacity (2,097,152 bytes for W25Q16JV)
+     * @return Capacity detected from JEDEC ID
      */
-    uint32_t getCapacity() { return W25Q16JV_MEMORY_SIZE; }
+    uint32_t getCapacity() { return _detected_capacity; }
     
     /**
      * @brief Check if address is valid
@@ -254,6 +254,7 @@ private:
     uint8_t _cs_pin;
     uint32_t _spi_freq;
     SPIClass* _spi;
+    uint32_t _detected_capacity;  // Auto-detected capacity from JEDEC ID
     
     // Buffer for sector read-modify-write
     uint8_t* _sector_buffer;
